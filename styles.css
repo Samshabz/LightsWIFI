@@ -1,0 +1,230 @@
+
+
+
+body {
+    --backcolor: rgb(255, 166, 107);
+    --buttoncolor: rgb(240, 124, 78);
+    user-select: none;
+    font-family: 'Arial', sans-serif;
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+    background: var(--backcolor); /* Example game-like background color */
+    background-size: cover;
+    background-repeat: no-repeat;
+    background-position: center;
+    color: #fff;
+}
+
+
+
+.button {
+    
+    
+    padding: 0.8em 1.7em;
+    margin: 10px;
+    background-color: transparent;
+    border-radius: .3em;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: .5s;
+    font-weight: 400;
+    font-size: 17px;
+    border: 1px solid black; /*var(--color);*/
+    font-family: inherit;
+    text-transform: uppercase;
+    color: black; /* var(--color);*/
+    z-index: 1;
+}
+
+.button::before, .button::after {
+    content: '';
+    display: block;
+    width: 50px;
+    height: 50px;
+    transform: translate(-50%, -50%);
+    position: absolute;
+    border-radius: 50%;
+    z-index: -1;
+    background-color: var(--buttoncolor);
+    transition: 1s ease;
+}
+
+.pressables {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.slider-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 10px;
+}
+
+.slider-container label {
+    width: 100px; /* Adjust as needed */
+    margin-right: 10px;
+}
+
+.slider-container input[type="range"] {
+    flex-grow: 1;
+    margin-right: 10px;
+}
+
+.slider-container input[type="text"] {
+    width: 60px; /* Adjust as needed */
+}
+
+
+.slider-container {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    margin-bottom: 1.4%;
+    margin-left: 15%;
+    width: 70%; /* Adjust the width as per your requirement */
+}
+
+.slider-container label {
+    margin-right: 10px;
+    flex-shrink: 0;
+    width: 100px; /* Adjust label width as needed */
+}
+
+.slider-container input[type="range"] {
+    width: 200px; /* Set a fixed width for sliders */
+    margin-right: 10px;
+}
+
+.slider-container input[type="text"] {
+    width: 60px;
+    flex-shrink: 0;
+}
+
+
+
+
+
+
+
+.button::before {
+    top: -1em;
+    left: -1em;
+}
+
+.button::after {
+    left: calc(100% + 1em);
+    top: calc(100% + 1em);
+}
+
+.button:hover::before, .button:hover::after {
+    height: 410px;
+    width: 410px;
+}
+
+.button:hover {
+    color: rgb(10, 25, 30);
+}
+
+
+.button.active {
+    background-color: var(--buttoncolor); /* Highlight color for active button */
+    color: white; /* Change text color for visibility */
+}
+
+
+/* Mobile responsiveness */
+@media screen and (max-width: 600px) {
+    .pressables {
+        flex-direction: column;
+    }
+
+    .button {
+        width: 80%;
+        margin: 10px auto;
+        transition: 0.2s ease;
+    }
+    .button::before, .button::after {
+        transition: 0.4s ease;
+        height: 0px; /* Increased height */
+        width: 0px; /* Increased width */
+    }
+    .button:hover::before, .button:hover::after {
+        height: 500px; /* Further increase for overlap */
+        width: 500px; /* Further increase for overlap */
+    }
+
+    .slider-container {
+        justify-content: flex-start;
+        margin-bottom: 4.4%;
+        margin-left: 5%;
+        width: 90%; /* Adjust the width as per your requirement */
+    }
+}
+
+
+
+/*for text labels of slider */
+.sliders label {
+    display: block;
+    margin: 10px 0;
+}
+
+.sliders input[type=range] {
+    width: 60%;
+    vertical-align: middle;
+}
+
+.sliders input[type=text] {
+    width: 60px;
+    margin-left: 10px;
+    padding: 5px;
+    border: 1px solid #ddd; /* Light gray border */
+    border-radius: 5px; /* Rounded corners */
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); /* Subtle shadow for depth */
+    font-family: 'Arial', sans-serif; /* Consistent font with the rest of the page */
+    text-align: center; /* Center the text inside the input box */
+    background-color: #f9f9f9; /* Light background color */
+    transition: all 0.3s ease; /* Smooth transition for focus effect */
+}
+
+.sliders input[type=text]:focus {
+    outline: none; /* Removes the default focus outline */
+    border-color: #009688; /* Highlight color when focused */
+    box-shadow: 0 0 8px rgba(0, 150, 136, 0.6); /* More prominent shadow when focused */
+}
+
+
+/*for ACTUAL slider */
+.sliders input[type=range] {
+    -webkit-appearance: none; /* Override default appearance */
+    width: 60%;
+    height: 10px;
+    border-radius: 5px;
+    background: #ddd;
+    outline: none;
+    opacity: 0.7;
+    -webkit-transition: .2s;
+    transition: opacity .2s;
+}
+
+.sliders input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; /* Override default appearance */
+    appearance: none;
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background: #fdfdfd;
+    cursor: pointer;
+}
+
+.sliders input[type=range]::-moz-range-thumb {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background: #009688;
+    cursor: pointer;
+}
