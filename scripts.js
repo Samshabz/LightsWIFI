@@ -123,8 +123,6 @@ function sendColorBits(bits) {
          
         }
     };
-/*    xhttp.open("GET", "http://[ESP8266_IP_ADDRESS]/command?bits=" + bits, true);
-    xhttp.send();*/
     xhttp.open("GET", "http://" + window.location.hostname + "/command?bits=" + bits, true);
     xhttp.send();
   

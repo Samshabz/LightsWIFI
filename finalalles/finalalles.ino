@@ -1,40 +1,68 @@
+#include <FastLED.h>
+#include <math.h>
+#define PIN            2  // Define the pin for LED data
+#define NUMPIXELS      360 // Number of LEDs in the strip
+#include <Adafruit_NeoPixel.h>
+
+
 #include <Arduino.h>
+#include <Wire.h>
 #include <WiFi.h>
-//#include <WebServer.h>
-#include <ESPAsyncWebServer.h>
+#include <WiFiClient.h>
+#include <WiFiAP.h>
+#include <AsyncWebServer_ESP32_SC_W5500.h>
 
 
-const char* ssid = "SMARTLIGHTS";     // Replace with your network SSID
-const char* password = "helloworld"; // Replace with your network password
-AsyncWebServer server(80); 
+const char* ssid = "25002783";     // Replace with your network SSID
+const char* password = "hello123  "; // Replace with your network password
+AsyncWebServer server(80);
 // put function declarations here:
 void handleCommand(AsyncWebServerRequest *request);
+void adjustColors(int &red, int &green, int &blue);
 void interpretBits(const String& bits);
 
+#define PIN            2  // Define the pin for LED data
+#define NUMPIXELS      360 // Number of LEDs in the strip
+
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 
+//variable declarations for LEDs
+int commnum =0;
+int PERMON=0;
+unsigned long previousMillis = 0;
+uint16_t hue = 0;
+String truebits;
+uint16_t permreset=0;
 
 void setup() {
+  //start light setup
+  strip.begin();
+  strip.show(); // Initialize all pixels to 'off'
 
+  //end light setup
+  //setup serial and wifi
   Serial.begin(115200);
-  WiFi.begin(ssid, password); // Connect to Wi-Fi
+  // WiFi.begin(ssid, password); // Connect to Wi-Fi
 
   // Wait for connection
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
+  if (!WiFi.softAP(ssid, password)) {
+    Serial.println("Could not create wi-fi network. Check SSID and password for validity.");
   }
-  
+  IPAddress myIP = WiFi.softAPIP();
+  Serial.print("AP IP address: ");
+  Serial.println(myIP);
+
   Serial.println("");
   Serial.print("Connected to ");
   Serial.println(ssid);
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
-    server.on("/command", handleCommand); // Handle "/command" URI
+  server.on("/command", handleCommand); // Handle "/command" URI
   server.begin(); // Start the server
   Serial.println("HTTP server started");
-    // Your initial setup code here
-    // (e.g., initializing serial communication, setting up WiFi, etc.)
+  // Your initial setup code here
+  // (e.g., initializing serial communication, setting up WiFi, etc.)
 
 
 
@@ -49,7 +77,7 @@ void setup() {
 
 
 
- // server setup
+  // server setup
   server.on("/", HTTP_GET, [](AsyncWebServerRequest * request) {
     String htmlContent = R"=====(
       <!DOCTYPE html>
@@ -194,7 +222,7 @@ body {
 
 
 /* Mobile responsiveness */
-@media screen and (max-width: 600px) {
+@media screen and (max-width: 1000px) {
     .pressables {
         flex-direction: column;
     }
@@ -295,8 +323,8 @@ body {
 
       <!-- Debug section for packet -->
       <div id="debugSection" style="position: absolute; top: 10px; left: 10px; color: black;">
-          <p>Debug Info:</p>
-          <p id="debugValue">Hex: None</p>
+          <p></p>
+          <p id="debugValue"></p>
       </div>
 
       <!-- RGB sliders -->
@@ -314,7 +342,7 @@ body {
               <input type="text" id="brightnessValue" value="50">
           </div>
           <div class="slider-container">
-              <label class="texthuelevel">Warmth: </label>
+              <label class="texthuelevel">Speed: </label>
               <input type="range" id="warmthSlider" min="0" max="100" value="50">
               <input type="text" id="warmthValue" value="50">
           </div>
@@ -324,8 +352,8 @@ body {
       <div class="pressables"> 
           <button class="button" id="solidcolor">SOLID COLOR</button>
           <button class="button HUE" id="HUE">HUE STROLLER</button>
-          <button class="button " id="patt3">SUPRISE 1</button>
-          <button class="button " id="patt4">SUPRISE 2</button>
+          <button class="button " id="patt3">PERM-OFF</button>
+          <button class="button " id="patt4">PERM-ON</button>
           <button class="button " id="patt5">SUPRISE 3</button>
       </div>
       <script src="/script.js"></script>
@@ -385,7 +413,7 @@ function updateColor() {
     let red = document.getElementById('redValue').value;
     let green = document.getElementById('greenValue').value;
     let blue = document.getElementById('blueValue').value;
-    sendColorBits('0000' + red.toString(16).padStart(2, '0') + green.toString(16).padStart(2, '0') + blue.toString(16).padStart(2, '0'));
+    sendColorBits('0000' + red.toString(16).padStart(3, '0') + green.toString(16).padStart(3, '0') + blue.toString(16).padStart(3, '0'));
 }
 
 
@@ -414,7 +442,7 @@ document.getElementById('HUE').addEventListener('click', function() {
 function updateHue() {
     let brightness = document.getElementById('brightnessValue').value;
     let warmth = document.getElementById('warmthValue').value;
-    sendColorBits('0001' + brightness.padStart(2, '0') + warmth.padStart(2, '0'));
+    sendColorBits('0001' + brightness.padStart(3, '0') + warmth.padStart(3, '0'));
 }
 
 
@@ -447,7 +475,7 @@ buttons.forEach(btn => {
 
 
 function sendColorBits(bits) {
-    document.getElementById('debugValue').innerText = 'Hex: ' + bits;
+   // document.getElementById('debugValue').innerText = 'Hex: ' + bits;
     
     var xhttp = new XMLHttpRequest();
     xhttp.onreadystatechange = function() {
@@ -579,10 +607,99 @@ function sendColorBits(bits) {
 
 
 void loop() {
+  
+
+if (commnum==0){
+    int redc = truebits.substring(4, 7).toInt();
+    int greenc = truebits.substring(7, 10).toInt();
+    int bluec = truebits.substring(10, 13).toInt();
+
+    adjustColors(redc, greenc, bluec);
+    redc*=1.3;
+
+   
+
+ for(int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, strip.Color(redc, greenc, bluec)); // Red color
+    
  
-    // Your main program loop code here
-    // This is typically where you handle ongoing tasks
+  }strip.show();
+  }
+
+  if (permreset==1){
+      for (int i=0; i < strip.numPixels(); i++) {
+  strip.setPixelColor(i, strip.Color(0,0,0)); // Set the color to the first LED
+  permreset=0;
+    
+  }
+  strip.show();
+    
+  }
+else if (commnum==1 || PERMON==1){ //runs permon if any wifi issue arrises 
+  
+  int brightness = truebits.substring(4, 7).toInt() *1.7;
+  int speedv = truebits.substring(7, 10).toInt();
+  if(PERMON==1){
+    brightness=200;
+    speedv=60;
+  }
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillis > 6){
+   // Serial.println("huenew: " + hue);
+    hue +=45; //65k max
+    hue += (int)((float)speedv/10);
+    if (hue>65535){
+      hue=0;
+    }
+    previousMillis = currentMillis;
+  }
+  uint32_t color = strip.ColorHSV(hue, 255, brightness);
+
+  for (int i=0; i < strip.numPixels(); i++) {
+  strip.setPixelColor(i, color); // Set the color to the first LED
+  
+    
+  }
+  strip.show();
+
 }
+
+//endloop
+}
+
+
+void adjustColors(int &red, int &green, int &blue) {
+    // If all colors are above 70, scale them down so the highest is at 70
+      red*=6;
+    if (red > 70 && green > 70 && blue > 70) {
+        int maxColor = max(red, max(green, blue));
+        float scale = 70.0 / maxColor;
+        red *= scale;
+        green *= scale;
+        blue *= scale;
+    }
+
+    // If 2 colors are above 150, scale them so the highest is 150
+    int countAbove150 = (red > 150) + (green > 150) + (blue > 150);
+    if (countAbove150 >= 2) {
+        int maxColor = max(red, max(green, blue));
+        float scale = 150.0 / maxColor;
+        red *= scale;
+        green *= scale;
+        blue *= scale;
+    }
+
+    // Ensure the sum of all colors never exceeds 300
+    int total = red + green + blue;
+    if (total > 300) {
+        float scale = 300.0 / total;
+        red *= scale;
+        green *= scale;
+        blue *= scale;
+    }
+}
+
+
 void handleCommand(AsyncWebServerRequest *request) {
   if (request->hasParam("bits")) {
     String bits = request->getParam("bits")->value();
@@ -594,39 +711,33 @@ void handleCommand(AsyncWebServerRequest *request) {
 }
 
 void interpretBits(const String& bits) {
+  
+  truebits = bits;
   Serial.println("Interpreting bits: " + bits);
+  
 
   // Extract the first 4 characters
   String command = bits.substring(0, 4);
 
+
   if (command == "0000") {
-     Serial.println("herewego");
-    // Add your logic here for command 0000
+    commnum=0;
+    
+
+    //delay(180);
   } else if (command == "0001") {
-     Serial.println("herewego");
-    // Logic for command 0001
+   commnum=1;
   } else if (command == "0002") {
-     Serial.println("herewego");
+   PERMON=0;
+   permreset=1;
+   commnum=2;
     // Logic for command 0002
   } else if (command == "0003") {
+    PERMON=1;
+    commnum=3;
     // Logic for command 0003
   } else if (command == "0004") {
     // Logic for command 0004
   }
   // ... and so on for other commands
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
