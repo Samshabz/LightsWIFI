@@ -13,8 +13,8 @@
 #include <AsyncWebServer_ESP32_SC_W5500.h>
 
 
-const char* ssid = "25002783";     // Replace with your network SSID
-const char* password = "hello123  "; // Replace with your network password
+const char* ssid = "SMARTlights";     // Replace with your network SSID
+const char* password = "hello123"; // Replace with your network password
 AsyncWebServer server(80);
 // put function declarations here:
 void handleCommand(AsyncWebServerRequest *request);
@@ -46,18 +46,29 @@ void setup() {
   // WiFi.begin(ssid, password); // Connect to Wi-Fi
 
   // Wait for connection
-  if (!WiFi.softAP(ssid, password)) {
+  /*if (!WiFi.softAP(ssid, password)) {
     Serial.println("Could not create wi-fi network. Check SSID and password for validity.");
   }
-  IPAddress myIP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(myIP);
+  IPAddress myIP = WiFi.softAPIP();*/
+  WiFi.begin(ssid, password); // Connect to home Wi-Fi
+Serial.print("Connecting to Wi-Fi");
+while (WiFi.status() != WL_CONNECTED) {
+  delay(500);
+  Serial.print(".");
+}
+Serial.println("");
+Serial.print("Connected to Wi-Fi. IP address: ");
+Serial.println(WiFi.localIP());
+
+
+
+  
+ // Serial.print("AP IP address: ");
+//  Serial.println(myIP); 
 
   Serial.println("");
   Serial.print("Connected to ");
   Serial.println(ssid);
-  Serial.print("IP address: ");
-  Serial.println(WiFi.localIP());
   server.on("/command", handleCommand); // Handle "/command" URI
   server.begin(); // Start the server
   Serial.println("HTTP server started");
