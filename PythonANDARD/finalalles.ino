@@ -1,10 +1,6 @@
 #include <FastLED.h>
 #include <math.h>
-#define PIN            2  // Define the pin for LED data
-#define NUMPIXELS      360 // Number of LEDs in the strip
 #include <Adafruit_NeoPixel.h>
-
-
 #include <Arduino.h>
 #include <Wire.h>
 #include <WiFi.h>
@@ -12,70 +8,92 @@
 #include <WiFiAP.h>
 #include <AsyncWebServer_ESP32_SC_W5500.h>
 
+// definitions for 3rd communication pattern - FFT music analysis
+#define PIN            2  // Define the pin for LED data
+#define NUMPIXELS      360 // Number of LEDs in the strip
+#define BAUD_RATE 115200
+#define LED_PIN            2  // Define the pin for LED data
+#define LED_COUNT       360 // Number of LEDs in the strip
+#define NUM_LEDS    360   // Number of LEDs in your strip
+#define NUM_BANDS   9     // Number of frequency bands
+#define BEAT_LEDS   40    // Number of LEDs at each end to flash for a beat
+
+
+const int numberOfBands = 9;
+const int ledsPerBand = LED_COUNT / numberOfBands;
+const int flashDuration = 300;
+bool flashRed = false;
 
 const char* ssid = "SMARTlights";     // Replace with your network SSID
 const char* password = "hello123"; // Replace with your network password
 AsyncWebServer server(80);
+
 // put function declarations here:
 void handleCommand(AsyncWebServerRequest *request);
 void adjustColors(int &red, int &green, int &blue);
 void interpretBits(const String& bits);
-
-#define PIN            2  // Define the pin for LED data
-#define NUMPIXELS      360 // Number of LEDs in the strip
+void triggerBeatEffect();
+void resetBeatLEDs();
+uint32_t volumeToColor(int band);
+void setStripColor(byte red, byte green, byte blue);
+void updateLEDs(uint8_t volumes[]);
+void readSerialAndProcess();
 
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 
+
 //variable declarations for LEDs
-int commnum =0;
-int PERMON=0;
+int commnum = -1;
+int PERMON = 0;
 unsigned long previousMillis = 0;
 uint16_t hue = 0;
 String truebits;
-uint16_t permreset=0;
+uint16_t permreset = 0;
+
+bool beatActive = false;
+unsigned long beatEffectDuration = 200; // Duration of the beat effect in milliseconds
+unsigned long lastBeatTime = 0;
+
+
+
+
+
 
 void setup() {
-  //start light setup
-  strip.begin();
-  strip.show(); // Initialize all pixels to 'off'
-
-  //end light setup
-  //setup serial and wifi
-  Serial.begin(115200);
-  // WiFi.begin(ssid, password); // Connect to Wi-Fi
+  Serial.begin(115200); // Start Serial communication
+  // Serial.begin(115200);
+  WiFi.begin(ssid, password); // Connect to Wi-Fi
 
   // Wait for connection
-  /*if (!WiFi.softAP(ssid, password)) {
+  if (!WiFi.softAP(ssid, password)) {
     Serial.println("Could not create wi-fi network. Check SSID and password for validity.");
   }
-  IPAddress myIP = WiFi.softAPIP();*/
-  WiFi.begin(ssid, password); // Connect to home Wi-Fi
-Serial.print("Connecting to Wi-Fi");
-while (WiFi.status() != WL_CONNECTED) {
-  delay(500);
-  Serial.print(".");
-}
-Serial.println("");
-Serial.print("Connected to Wi-Fi. IP address: ");
-Serial.println(WiFi.localIP());
+  IPAddress myIP = WiFi.softAPIP();
+  //  WiFi.begin(ssid, password); // Connect to home Wi-Fi
+  //Serial.print("Connecting to Wi-Fi");
+  //while (WiFi.status() != WL_CONNECTED) {
+  //  delay(500);
+  //  Serial.print(".");
+  //}
+  //Serial.println("");
+  //Serial.print("Connected to Wi-Fi. IP address: ");
+  //Serial.println(WiFi.localIP());
+  //
 
 
 
-  
- // Serial.print("AP IP address: ");
-//  Serial.println(myIP); 
+  Serial.print("AP IP address: ");
+  Serial.println(myIP);
 
-  Serial.println("");
-  Serial.print("Connected to ");
-  Serial.println(ssid);
+  //  Serial.println("");
+  //  Serial.print("Connected to ");
+  //  Serial.println(ssid);
   server.on("/command", handleCommand); // Handle "/command" URI
-  server.begin(); // Start the server
+ // server.begin(); // Start the server
   Serial.println("HTTP server started");
   // Your initial setup code here
   // (e.g., initializing serial communication, setting up WiFi, etc.)
-
-
 
 
 
@@ -604,7 +622,96 @@ function sendColorBits(bits) {
 
 
 
+void setStripColor(byte red, byte green, byte blue) {
+  for (int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, strip.Color(red, green, blue));
+  }
+  strip.show();
+}
 
+void updateLEDs(uint8_t volumes[]) {
+    int ledsPerBand = (NUM_LEDS - 2 * BEAT_LEDS) / NUM_BANDS;
+    for (int band = 0; band < NUM_BANDS; band++) {
+        int numLitLEDs = map(volumes[band], 0, 10, 0, ledsPerBand);
+        for (int i = band * ledsPerBand + BEAT_LEDS; i < band * ledsPerBand + numLitLEDs + BEAT_LEDS; i++) {
+            strip.setPixelColor(i, volumeToColor(band));
+        }
+        for (int i = band * ledsPerBand + numLitLEDs + BEAT_LEDS; i < (band + 1) * ledsPerBand + BEAT_LEDS; i++) {
+            strip.setPixelColor(i, strip.Color(0, 0, 0));
+        }
+    }
+    strip.show();
+}
+
+uint32_t volumeToColor(int band) {
+    uint32_t colors[NUM_BANDS] = {
+        strip.Color(255, 183, 38), // oran
+        strip.Color(237, 222, 38), // yel
+        strip.Color(110, 255, 38), // gre
+        strip.Color(38, 255, 201), // turq
+        strip.Color(38, 147, 200), // Light blue
+        strip.Color(0, 0, 255), // Full blue
+        strip.Color(165, 38, 255), // Purple
+        strip.Color(179, 27, 128), // Magenta
+        strip.Color(115, 17, 60)  // Purple
+        /*
+     (30, 200), 
+    (60, 240),
+    (250, 480),
+    (500, 770),
+    (800, 1060),
+    (1100, 1550),
+    (1600, 2420),
+    (2500, 3900),
+    (4000, 8000),
+         */
+      
+    };
+    return colors[band % NUM_BANDS];
+}
+
+void triggerBeatEffect() {
+    for (int i = 0; i < BEAT_LEDS; i++) {
+        strip.setPixelColor(i, strip.Color(255, 0, 0)); // First 30 LEDs
+        strip.setPixelColor(NUM_LEDS - 1 - i, strip.Color(255, 0, 0)); // Last 30 LEDs
+    }
+    strip.show();
+    beatActive = true;
+    lastBeatTime = millis();
+}
+
+void resetBeatLEDs() {
+    for (int i = 0; i < BEAT_LEDS; i++) {
+        strip.setPixelColor(i, strip.Color(0, 0, 0)); // Reset first 30 LEDs to black
+        strip.setPixelColor(NUM_LEDS - 1 - i, strip.Color(0, 0, 0)); // Reset last 30 LEDs to black
+    }
+    strip.show();
+}
+
+
+
+void readSerialAndProcess() {
+  if (Serial.available() >= NUM_BANDS + 1) { // Check if enough data is available
+    uint8_t volumes[NUM_BANDS];
+    
+    for (int i = 0; i < NUM_BANDS; i++) {
+      
+      volumes[i] = Serial.read(); // Read volume level for each band
+    }
+    
+    char signal = Serial.peek(); // Check for beat signal without removing it from buffer
+    if (signal == 'B') {
+      Serial.read(); // Consume the 'B'
+      triggerBeatEffect();
+    }
+    updateLEDs(volumes);
+  }
+
+  if (beatActive && (millis() - lastBeatTime > beatEffectDuration)) {
+    beatActive = false;
+    resetBeatLEDs();
+  }
+}
 
 
 
@@ -618,100 +725,153 @@ function sendColorBits(bits) {
 
 
 void loop() {
-  
 
-if (commnum==0){
+  //  if (commnum == -1) {
+  //    //run default case
+  //
+  //
+  ////    for (int i = 0; i < strip.numPixels(); i++) {
+  ////      strip.setPixelColor(i, strip.Color(0, 100, 100)); // Default blue - can implement default hue wave if desired
+  ////
+  ////
+  ////    } strip.show();
+  //
+  //  }
+
+  if (commnum == 0) {
     int redc = truebits.substring(4, 7).toInt();
     int greenc = truebits.substring(7, 10).toInt();
     int bluec = truebits.substring(10, 13).toInt();
 
     adjustColors(redc, greenc, bluec);
-    redc*=1.3;
+    redc *= 1.3;
 
-   
 
- for(int i = 0; i < strip.numPixels(); i++) {
-    strip.setPixelColor(i, strip.Color(redc, greenc, bluec)); // Red color
-    
- 
-  }strip.show();
+
+    for (int i = 0; i < strip.numPixels(); i++) {
+      strip.setPixelColor(i, strip.Color(redc, greenc, bluec)); // Red color
+
+
+    } strip.show();
   }
 
-  if (permreset==1){
-      for (int i=0; i < strip.numPixels(); i++) {
-  strip.setPixelColor(i, strip.Color(0,0,0)); // Set the color to the first LED
-  permreset=0;
-    
-  }
-  strip.show();
-    
-  }
-else if (commnum==1 || PERMON==1){ //runs permon if any wifi issue arrises 
-  
-  int brightness = truebits.substring(4, 7).toInt() *1.7;
-  int speedv = truebits.substring(7, 10).toInt();
-  if(PERMON==1){
-    brightness=200;
-    speedv=60;
-  }
-  unsigned long currentMillis = millis();
-  if (currentMillis - previousMillis > 6){
-   // Serial.println("huenew: " + hue);
-    hue +=45; //65k max
-    hue += (int)((float)speedv/10);
-    if (hue>65535){
-      hue=0;
+  else if (permreset == 1) {
+    for (int i = 0; i < strip.numPixels(); i++) {
+      strip.setPixelColor(i, strip.Color(0, 0, 0)); // Set the color to the first LED
+      permreset = 0;
+
     }
-    previousMillis = currentMillis;
-  }
-  uint32_t color = strip.ColorHSV(hue, 255, brightness);
+    strip.show();
 
-  for (int i=0; i < strip.numPixels(); i++) {
-  strip.setPixelColor(i, color); // Set the color to the first LED
-  
-    
   }
-  strip.show();
+  else if (commnum == 1 || PERMON == 1) { //runs permon if any wifi issue arrises
 
+    int brightness = truebits.substring(4, 7).toInt() * 1.7;
+    int speedv = truebits.substring(7, 10).toInt();
+    if (PERMON == 1) {
+      brightness = 200;
+      speedv = 60;
+    }
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousMillis > 6) {
+      // Serial.println("huenew: " + hue);
+      hue += 45; //65k max
+      hue += (int)((float)speedv / 10);
+      if (hue > 65535) {
+        hue = 0;
+      }
+      previousMillis = currentMillis;
+    }
+    uint32_t color = strip.ColorHSV(hue, 255, brightness);
+
+    for (int i = 0; i < strip.numPixels(); i++) {
+      strip.setPixelColor(i, color); // Set the color to the first LED
+
+
+    }
+    strip.show();
+
+  }
+
+
+
+
+
+
+
+
+
+
+
+
+
+  else if (commnum == 3 || commnum == -1) {
+    readSerialAndProcess();
+
+  }
 }
 
-//endloop
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 void adjustColors(int &red, int &green, int &blue) {
-    // If all colors are above 70, scale them down so the highest is at 70
-      red*=6;
-    if (red > 70 && green > 70 && blue > 70) {
-        int maxColor = max(red, max(green, blue));
-        float scale = 70.0 / maxColor;
-        red *= scale;
-        green *= scale;
-        blue *= scale;
-    }
+  // If all colors are above 70, scale them down so the highest is at 70
+  red *= 6;
+  if (red > 70 && green > 70 && blue > 70) {
+    int maxColor = max(red, max(green, blue));
+    float scale = 70.0 / maxColor;
+    red *= scale;
+    green *= scale;
+    blue *= scale;
+  }
 
-    // If 2 colors are above 150, scale them so the highest is 150
-    int countAbove150 = (red > 150) + (green > 150) + (blue > 150);
-    if (countAbove150 >= 2) {
-        int maxColor = max(red, max(green, blue));
-        float scale = 150.0 / maxColor;
-        red *= scale;
-        green *= scale;
-        blue *= scale;
-    }
+  // If 2 colors are above 150, scale them so the highest is 150
+  int countAbove150 = (red > 150) + (green > 150) + (blue > 150);
+  if (countAbove150 >= 2) {
+    int maxColor = max(red, max(green, blue));
+    float scale = 150.0 / maxColor;
+    red *= scale;
+    green *= scale;
+    blue *= scale;
+  }
 
-    // Ensure the sum of all colors never exceeds 300
-    int total = red + green + blue;
-    if (total > 300) {
-        float scale = 300.0 / total;
-        red *= scale;
-        green *= scale;
-        blue *= scale;
-    }
+  // Ensure the sum of all colors never exceeds 300
+  int total = red + green + blue;
+  if (total > 300) {
+    float scale = 300.0 / total;
+    red *= scale;
+    green *= scale;
+    blue *= scale;
+  }
 }
 
 
-void handleCommand(AsyncWebServerRequest *request) {
+
+
+
+
+
+void handleCommand(AsyncWebServerRequest * request) {
   if (request->hasParam("bits")) {
     String bits = request->getParam("bits")->value();
     interpretBits(bits);
@@ -721,31 +881,34 @@ void handleCommand(AsyncWebServerRequest *request) {
   }
 }
 
-void interpretBits(const String& bits) {
-  
+
+
+void interpretBits(const String & bits) {
+
+
   truebits = bits;
   Serial.println("Interpreting bits: " + bits);
-  
+
 
   // Extract the first 4 characters
   String command = bits.substring(0, 4);
 
 
   if (command == "0000") {
-    commnum=0;
-    
+    commnum = 0;
+
 
     //delay(180);
   } else if (command == "0001") {
-   commnum=1;
+    commnum = 1;
   } else if (command == "0002") {
-   PERMON=0;
-   permreset=1;
-   commnum=2;
+    PERMON = 0;
+    permreset = 1;
+    commnum = 2;
     // Logic for command 0002
   } else if (command == "0003") {
-    PERMON=1;
-    commnum=3;
+    // PERMON=1;
+    commnum = 3;
     // Logic for command 0003
   } else if (command == "0004") {
     // Logic for command 0004
